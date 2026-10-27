@@ -1,6 +1,12 @@
 import { createStore } from './store.js';
 import { h } from './ui/dom.js';
+import { needsBackupReminder } from './backup.js';
 import * as today from './ui/today.js';
+import * as history from './ui/history.js';
+import * as journal from './ui/journal.js';
+import * as notes from './ui/notes.js';
+import * as more from './ui/more.js';
+import { runBackup } from './ui/backup-ui.js';
 
 const store = createStore(localStorage);
 // Handy for checking data from the browser console.
@@ -9,15 +15,7 @@ window.store = store;
 // Ask Safari not to clear our data when space runs low. Not guaranteed, hence backups.
 navigator.storage?.persist?.().catch(() => {});
 
-const stub = (title) => ({ render: (root) => root.replaceChildren(h('h1', {}, title)) });
-
-const ROUTES = {
-  today,
-  history: stub('History'),
-  journal: stub('Vault journal'),
-  notes: stub('Steps & poles'),
-  more: stub('More'),
-};
+const ROUTES = { today, history, journal, notes, more };
 
 const svg = (paths) => `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">${paths}</svg>`;
 
@@ -31,6 +29,7 @@ const TABS = [
 
 const app = document.getElementById('app');
 const tabs = document.getElementById('tabs');
+const banner = document.getElementById('banner');
 
 function currentRoute() {
   const [name, arg] = location.hash.replace(/^#\/?/, '').split('/');
@@ -49,15 +48,33 @@ function renderTabs(active) {
   }));
 }
 
+function renderBanner() {
+  if (!needsBackupReminder(store.getState(), new Date())) {
+    banner.replaceChildren();
+    return;
+  }
+  banner.replaceChildren(h('div', { class: 'banner', role: 'alert' },
+    h('p', {}, "It's been over a week since your last backup."),
+    h('div', { class: 'row-btns' },
+      h('button', { onclick: async () => { await runBackup(store); renderApp(); } }, 'Back up'),
+      h('button', { onclick: () => { store.dismissReminder(); renderBanner(); } }, 'Not now'))));
+}
+
 function renderApp() {
   const { name, arg } = currentRoute();
   renderTabs(name);
+  renderBanner();
   ROUTES[name].render(app, { store, navigate, arg, rerender: renderApp });
 }
 
 window.addEventListener('hashchange', () => {
   renderApp();
   window.scrollTo(0, 0);
+});
+
+// Reopening the app from the Home Screen: refresh the date-dependent parts.
+document.addEventListener('visibilitychange', () => {
+  if (document.visibilityState === 'visible' && !document.activeElement?.matches('input, textarea, select')) renderApp();
 });
 
 renderApp();

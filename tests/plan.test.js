@@ -1,6 +1,6 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { PHASES, SESSIONS, getSession, liftExercises } from '../js/plan.js';
+import { PHASES, SESSIONS, getSession, liftExercises, exerciseInfo } from '../js/plan.js';
 import { FIELDS } from '../js/logic.js';
 
 const allRows = () => SESSIONS.flatMap((s) => s.rows);
@@ -62,6 +62,12 @@ test('exercise identity across days', () => {
   assert.equal(row('thu-4').options[0].exerciseId, 'db-bench-thu');
   assert.equal(row('tue-6').options[0].exerciseId, 'nordic-curl');
   assert.equal(row('fri-5').options[0].exerciseId, 'nordic-curl');
+});
+
+test('exerciseInfo finds name and type by id', () => {
+  assert.deepEqual(exerciseInfo('single-leg-rdl'), { name: 'Single-leg RDL', type: 'lift' });
+  assert.deepEqual(exerciseInfo('main-plyos'), { name: 'Main plyometrics', type: 'plyo' });
+  assert.equal(exerciseInfo('nope'), undefined);
 });
 
 test('liftExercises lists unique lifts plus the partial squat', () => {

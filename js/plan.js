@@ -169,6 +169,16 @@ export function setsFor(row, option, phase) {
   return (option.sets ?? row.sets)[phase];
 }
 
+export function exerciseInfo(exerciseId) {
+  for (const s of SESSIONS) {
+    for (const r of s.rows) {
+      const o = r.options.find((x) => x.exerciseId === exerciseId);
+      if (o) return { name: o.name, type: o.type };
+    }
+  }
+  return undefined;
+}
+
 // Every lift that can have a max, for the Maxes screen.
 export function liftExercises() {
   const seen = new Map();
