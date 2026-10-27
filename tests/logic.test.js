@@ -2,8 +2,25 @@ import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import {
   todayISO, defaultSessionId, isVaultDay, round5,
-  targetWeightText, parseNum, addDaysISO, FIELDS,
+  targetWeightText, parseNum, addDaysISO, FIELDS, formatSet, formatDate,
 } from '../js/logic.js';
+
+test('formatSet per exercise type', () => {
+  assert.equal(formatSet('lift', { weight: 185, reps: 5 }), '185 lb × 5');
+  assert.equal(formatSet('lift', { weight: null, reps: 8 }), '× 8');
+  assert.equal(formatSet('iso', { reps: 3, seconds: 3 }), '3 × 3 s');
+  assert.equal(formatSet('plyo', { drill: 'hurdle hops', contacts: 20 }), 'hurdle hops · 20 contacts');
+  assert.equal(formatSet('plyo', { drill: '', contacts: 20 }), '20 contacts');
+  assert.equal(formatSet('reps', { reps: 6 }), '6 reps');
+  assert.equal(formatSet('hold', { seconds: 30 }), '30 s');
+  assert.equal(formatSet('count', { count: 4 }), '4');
+  assert.equal(formatSet('done', { minutes: 8 }), 'Done · 8 min');
+  assert.equal(formatSet('done', { minutes: null }), 'Done');
+});
+
+test('formatDate is short and local', () => {
+  assert.equal(formatDate('2026-10-30'), 'Fri, Oct 30');
+});
 
 test('todayISO uses local date', () => {
   assert.equal(todayISO(new Date(2026, 9, 27, 23, 30)), '2026-10-27');

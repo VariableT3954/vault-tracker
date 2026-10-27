@@ -53,6 +53,28 @@ export function targetWeightText(pct, max) {
   return lo === hi ? `${lo} lb` : `${lo}–${hi} lb`;
 }
 
+// One logged set as short text, e.g. "185 lb × 5".
+export function formatSet(type, v) {
+  switch (type) {
+    case 'lift': return v.weight == null ? `× ${v.reps}` : `${v.weight} lb × ${v.reps}`;
+    case 'iso': return `${v.reps} × ${v.seconds} s`;
+    case 'plyo': return v.drill ? `${v.drill} · ${v.contacts} contacts` : `${v.contacts} contacts`;
+    case 'reps': return `${v.reps} reps`;
+    case 'hold': return `${v.seconds} s`;
+    case 'count': return `${v.count}`;
+    case 'done': return v.minutes == null ? 'Done' : `Done · ${v.minutes} min`;
+    default: return '';
+  }
+}
+
+const WEEKDAYS = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
+const MONTHS = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+
+export function formatDate(iso) {
+  const d = parseISO(iso);
+  return `${WEEKDAYS[d.getDay()]}, ${MONTHS[d.getMonth()]} ${d.getDate()}`;
+}
+
 // Numbers typed on a phone: trims spaces, rejects blanks, junk and negatives.
 export function parseNum(input) {
   const s = String(input ?? '').trim();
