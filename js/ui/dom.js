@@ -59,16 +59,31 @@ export function toast(text) {
   toastTimer = setTimeout(() => el.classList.remove('show'), 2200);
 }
 
+const pending = new Set();
+
 export function debounce(fn, ms) {
   let t;
-  const d = (...args) => {
+  let last;
+  const run = () => {
     clearTimeout(t);
-    t = setTimeout(() => fn(...args), ms);
+    pending.delete(d);
+    fn(...last);
   };
-  // Run a pending call now, e.g. when leaving the screen.
-  d.flush = (...args) => {
+  const d = (...args) => {
+    last = args;
     clearTimeout(t);
-    fn(...args);
+    pending.add(d);
+    t = setTimeout(run, ms);
+  };
+  // Run the waiting call now, if there is one.
+  d.flush = () => {
+    if (pending.has(d)) run();
   };
   return d;
+}
+
+// Save everything still waiting to be saved: before leaving a screen, finishing a
+// workout, or when iOS sends the app to the background.
+export function flushPending() {
+  for (const d of [...pending]) d.flush();
 }

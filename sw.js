@@ -1,6 +1,7 @@
 // Offline support: the whole app is cached on first load and served from the cache.
-// Bump CACHE on every release so phones pick up the new files on their next open.
-const CACHE = 'vt-shell-v1';
+// CACHE is a fingerprint of the app files; `node tools/bump-cache.mjs` updates it and
+// `npm test` fails if it is stale. A new name is how phones pick up a new version.
+const CACHE = 'vt-524840cf97';
 
 const SHELL = [
   './',
@@ -25,7 +26,9 @@ const SHELL = [
 ];
 
 self.addEventListener('install', (event) => {
-  event.waitUntil(caches.open(CACHE).then((cache) => cache.addAll(SHELL)).then(() => self.skipWaiting()));
+  // cache: 'reload' skips the browser's HTTP cache, so a new version never saves old copies.
+  const fresh = SHELL.map((url) => new Request(url, { cache: 'reload' }));
+  event.waitUntil(caches.open(CACHE).then((cache) => cache.addAll(fresh)).then(() => self.skipWaiting()));
 });
 
 self.addEventListener('activate', (event) => {

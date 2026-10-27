@@ -1,5 +1,6 @@
 // All app data, kept as one JSON object in storage and saved on every change.
 import { todayISO } from './logic.js';
+import { findRow } from './plan.js';
 
 export const STORAGE_KEY = 'vault-tracker:v1';
 
@@ -27,12 +28,27 @@ function load(storage, now) {
   try {
     const parsed = JSON.parse(raw);
     if (!parsed || typeof parsed !== 'object' || !Array.isArray(parsed.workouts)) throw new Error('bad shape');
-    return { ...emptyState(), ...parsed };
+    return repair({ ...emptyState(), ...parsed });
   } catch {
     // Keep the unreadable text so nothing is lost for good, then start fresh.
     storage.setItem(`vault-tracker:corrupt-${now().getTime()}`, raw);
     return emptyState();
   }
+}
+
+// Older saves could hold sets under an entry with no exercise id (a note typed before the
+// first set). Recover the id from the plan: the remembered choice, else the row's first option.
+function repair(state) {
+  for (const w of state.workouts) {
+    for (const [rowId, e] of Object.entries(w.entries ?? {})) {
+      if (e.exerciseId || !e.sets?.length) continue;
+      const row = findRow(rowId);
+      if (!row) continue;
+      const choice = state.rowChoices?.[rowId];
+      e.exerciseId = row.options.some((o) => o.exerciseId === choice) ? choice : row.options[0].exerciseId;
+    }
+  }
+  return state;
 }
 
 export function createStore(storage, now = () => new Date()) {
@@ -66,9 +82,12 @@ export function createStore(storage, now = () => new Date()) {
     if (state.inProgressId === id) state.inProgressId = null;
   };
 
+  // An entry with no sets yet takes whichever option is being logged now.
   const entryFor = (w, rowId, exerciseId) => {
     w.entries[rowId] ??= { exerciseId, sets: [], note: '' };
-    return w.entries[rowId];
+    const e = w.entries[rowId];
+    if (e.sets.length === 0) e.exerciseId = exerciseId;
+    return e;
   };
 
   return {
@@ -128,12 +147,14 @@ export function createStore(storage, now = () => new Date()) {
       if (!e?.sets[i]) return;
       change(() => { e.sets.splice(i, 1); });
     },
-    setNote: (rowId, text) => {
-      const w = requireCurrent();
-      const e = w.entries[rowId];
+    // workoutId pins a delayed save to the workout it was typed in, even if that workout
+    // has since been finished; if it was discarded the note is dropped with it.
+    setNote: (rowId, exerciseId, text, workoutId) => {
+      const w = workoutId ? state.workouts.find((x) => x.id === workoutId) : requireCurrent();
+      if (!w) return;
       change(() => {
-        if (e) e.note = text;
-        else w.entries[rowId] = { exerciseId: null, sets: [], note: text };
+        w.entries[rowId] ??= { exerciseId, sets: [], note: '' };
+        w.entries[rowId].note = text;
       });
     },
 

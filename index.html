@@ -20,6 +20,16 @@
   <main id="app" aria-live="polite"></main>
   <nav id="tabs" aria-label="Sections"></nav>
   <div id="toast" role="status"></div>
+  <script>
+    // If the app's code fails to load, say so instead of showing a blank screen.
+    window.addEventListener('error', function () {
+      var app = document.getElementById('app');
+      if (app && !app.childElementCount) {
+        app.innerHTML = '<h1>Vault Tracker</h1><p>The app didn\'t load properly. Close it fully and open it again. ' +
+          'Your saved workouts are still on this phone.</p>';
+      }
+    }, true);
+  </script>
   <script type="module" src="./js/app.js"></script>
 </body>
 </html>

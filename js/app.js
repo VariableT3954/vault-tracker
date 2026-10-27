@@ -1,5 +1,6 @@
 import { createStore } from './store.js';
-import { h } from './ui/dom.js';
+import { h, flushPending } from './ui/dom.js';
+import { todayISO } from './logic.js';
 import { needsBackupReminder } from './backup.js';
 import * as today from './ui/today.js';
 import * as history from './ui/history.js';
@@ -60,7 +61,11 @@ function renderBanner() {
       h('button', { onclick: () => { store.dismissReminder(); renderBanner(); } }, 'Not now'))));
 }
 
+let renderedDate = todayISO();
+
 function renderApp() {
+  flushPending();
+  renderedDate = todayISO();
   const { name, arg } = currentRoute();
   renderTabs(name);
   renderBanner();
@@ -72,9 +77,16 @@ window.addEventListener('hashchange', () => {
   window.scrollTo(0, 0);
 });
 
-// Reopening the app from the Home Screen: refresh the date-dependent parts.
 document.addEventListener('visibilitychange', () => {
-  if (document.visibilityState === 'visible' && !document.activeElement?.matches('input, textarea, select')) renderApp();
+  if (document.visibilityState === 'hidden') {
+    // iOS may close the app any time after this, so save waiting notes now.
+    flushPending();
+    return;
+  }
+  // Coming back (e.g. from a timer app between sets): keep anything typed but not yet
+  // logged. Only re-render when the date has rolled over.
+  if (todayISO() !== renderedDate) renderApp();
+  else renderBanner();
 });
 
 renderApp();

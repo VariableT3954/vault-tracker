@@ -1,6 +1,6 @@
 // Today: the planned (or chosen) workout, logged one set at a time.
-import { h, choiceDialog, confirmDialog, toast, debounce } from './dom.js';
-import { SESSIONS, getSession, setsFor, PHASE_NAMES } from '../plan.js';
+import { h, choiceDialog, confirmDialog, toast, debounce, flushPending } from './dom.js';
+import { SESSIONS, getSession, setsFor, resolveOption, PHASE_NAMES } from '../plan.js';
 import {
   FIELDS, todayISO, defaultSessionId, isVaultDay, targetWeightText, parseNum, formatSet, formatDate,
 } from '../logic.js';
@@ -16,6 +16,7 @@ let editKey = null; // "rowId:index" of a logged set being edited
 const addOpen = new Set(); // rows where "Add set" was tapped
 
 export function render(root, ctx) {
+  flushPending(); // notes typed on the old screen are saved before it is replaced
   const { store, navigate } = ctx;
   const rerender = () => render(root, ctx);
   const state = store.getState();
@@ -32,6 +33,7 @@ export function render(root, ctx) {
 
   async function switchTo(newId) {
     if (newId === sessionId) return;
+    flushPending();
     const cur = store.inProgress();
     if (cur && store.hasLoggedSets()) {
       const choice = await choiceDialog(
@@ -75,6 +77,7 @@ export function render(root, ctx) {
       h('div', { class: 'row-btns' },
         h('button', {
           onclick: () => {
+            flushPending();
             store.finishWorkout();
             picked = null;
             toast('Workout saved to History');
@@ -84,6 +87,7 @@ export function render(root, ctx) {
         h('button', {
           onclick: async () => {
             if (await confirmDialog("Discard this workout's logged sets? This can't be undone.", 'Discard', { danger: true })) {
+              flushPending();
               store.discardWorkout();
               picked = null;
               rerender();
@@ -118,6 +122,7 @@ export function render(root, ctx) {
       class: 'primary block',
       style: 'margin-top:14px',
       onclick: () => {
+        flushPending();
         store.finishWorkout();
         picked = null;
         editKey = null;
@@ -131,6 +136,7 @@ export function render(root, ctx) {
       class: 'link danger',
       onclick: async () => {
         if (await confirmDialog("Discard this workout's logged sets? This can't be undone.", 'Discard', { danger: true })) {
+          flushPending();
           store.discardWorkout();
           picked = null;
           rerender();
@@ -152,8 +158,7 @@ export function render(root, ctx) {
   function rowCard(row) {
     const entry = w?.entries[row.id];
     const logged = entry?.sets ?? [];
-    const optId = entry?.exerciseId ?? store.choiceFor(row.id) ?? row.options[0].exerciseId;
-    const option = row.options.find((o) => o.exerciseId === optId) ?? row.options[0];
+    const option = resolveOption(row, entry, store.choiceFor(row.id));
     const planned = setsFor(row, option, phase);
     const pct = row.pct?.[phase];
     const max = state.maxes[row.maxRef?.[phase]]?.value;
@@ -178,10 +183,9 @@ export function render(root, ctx) {
     }
 
     const note = entry?.note ?? '';
-    const saveNote = debounce((text) => {
-      ensureWorkout();
-      store.setNote(row.id, text);
-    }, 400);
+    // The workout id is fixed when typing starts, so a save that lands after Finish
+    // still goes to the right workout instead of starting a new one.
+    const saveNote = debounce((workoutId, text) => store.setNote(row.id, option.exerciseId, text, workoutId), 400);
 
     return h('div', { class: complete ? 'card complete' : 'card' },
       h('div', { class: 'card-title' }, title, complete && h('span', { class: 'tick', 'aria-label': 'Done' }, '✓')),
@@ -206,8 +210,11 @@ export function render(root, ctx) {
         h('summary', {}, note ? 'Notes' : '+ Notes'),
         h('textarea', {
           placeholder: 'How did it feel?',
-          oninput: (e) => saveNote(e.target.value),
-          onchange: (e) => saveNote.flush(e.target.value),
+          oninput: (e) => {
+            ensureWorkout();
+            saveNote(store.inProgress().id, e.target.value);
+          },
+          onchange: () => saveNote.flush(),
         }, note)));
 
     function inputsFor(values) {

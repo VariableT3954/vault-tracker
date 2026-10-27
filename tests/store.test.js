@@ -126,7 +126,7 @@ test('update, delete sets and notes', () => {
   s.logSet('fri-3', 'back-squat', sq(195, 5));
   s.updateSet('fri-3', 0, sq(190, 5));
   s.deleteSet('fri-3', 1);
-  s.setNote('fri-3', 'bar felt slow');
+  s.setNote('fri-3', 'back-squat', 'bar felt slow');
   const e = s.inProgress().entries['fri-3'];
   assert.deepEqual(e.sets, [sq(190, 5)]);
   assert.equal(e.note, 'bar felt slow');
@@ -214,4 +214,55 @@ test('subscribers hear about changes', () => {
   off();
   s.setPhase('C');
   assert.equal(calls, 1);
+});
+
+test('note before first set keeps the exercise id', () => {
+  const s = createStore(memStorage(), clock(2026, 10, 30).fn);
+  s.startWorkout('fri');
+  s.setNote('fri-3', 'back-squat', 'felt good');
+  s.logSet('fri-3', 'back-squat', sq(185, 5));
+  assert.equal(s.inProgress().entries['fri-3'].exerciseId, 'back-squat');
+  assert.deepEqual(s.prefill('back-squat', 1), sq(185, 5));
+});
+
+test('logging after all sets were deleted records the newly chosen option', () => {
+  const s = createStore(memStorage(), clock(2026, 10, 30).fn);
+  s.startWorkout('fri');
+  s.logSet('fri-4', 'romanian-deadlift', sq(135, 6));
+  s.deleteSet('fri-4', 0);
+  s.logSet('fri-4', 'trap-bar-deadlift', sq(225, 5));
+  assert.equal(s.inProgress().entries['fri-4'].exerciseId, 'trap-bar-deadlift');
+});
+
+test('repairs saved entries that lost their exercise id', () => {
+  const saved = {
+    workouts: [{
+      id: 'w', sessionId: 'fri', phase: 'GP', date: '2026-10-23', startedAt: 'a', finishedAt: 'b',
+      entries: {
+        'fri-3': { exerciseId: null, sets: [sq(185, 5)], note: 'n' },
+        'fri-4': { exerciseId: null, sets: [sq(95, 6)], note: '' },
+      },
+    }],
+    settings: { phase: 'GP' },
+    rowChoices: { 'fri-4': 'single-leg-rdl' },
+  };
+  const s = createStore(memStorage({ [STORAGE_KEY]: JSON.stringify(saved) }), clock(2026, 10, 30).fn);
+  const e = s.history()[0].entries;
+  assert.equal(e['fri-3'].exerciseId, 'back-squat');
+  assert.equal(e['fri-4'].exerciseId, 'single-leg-rdl');
+});
+
+test('a late note save goes to its own workout and never starts a new one', () => {
+  const s = createStore(memStorage(), clock(2026, 10, 30).fn);
+  const w = s.startWorkout('fri');
+  s.logSet('fri-3', 'back-squat', sq(185, 5));
+  s.finishWorkout();
+  s.setNote('fri-3', 'back-squat', 'late note', w.id);
+  assert.equal(s.inProgress(), null);
+  assert.equal(s.history()[0].entries['fri-3'].note, 'late note');
+
+  const gone = s.startWorkout('tue');
+  s.discardWorkout();
+  s.setNote('tue-6', 'nordic-curl', 'lost', gone.id);
+  assert.equal(s.getState().workouts.length, 1);
 });

@@ -1,6 +1,6 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { PHASES, SESSIONS, getSession, liftExercises, exerciseInfo } from '../js/plan.js';
+import { PHASES, SESSIONS, getSession, liftExercises, exerciseInfo, resolveOption } from '../js/plan.js';
 import { FIELDS } from '../js/logic.js';
 
 const allRows = () => SESSIONS.flatMap((s) => s.rows);
@@ -74,4 +74,15 @@ test('liftExercises lists unique lifts plus the partial squat', () => {
   const ids = liftExercises().map((e) => e.exerciseId);
   assert.equal(new Set(ids).size, ids.length);
   for (const id of ['back-squat', 'power-clean', 'partial-squat', 'db-bench-flat']) assert.ok(ids.includes(id), id);
+});
+
+test('resolveOption: logged sets win, otherwise the remembered choice, otherwise the first option', () => {
+  const r = SESSIONS.find((s) => s.id === 'fri').rows.find((x) => x.id === 'fri-4');
+  assert.equal(resolveOption(r, undefined, undefined).exerciseId, 'romanian-deadlift');
+  assert.equal(resolveOption(r, undefined, 'trap-bar-deadlift').exerciseId, 'trap-bar-deadlift');
+  const withSets = { exerciseId: 'single-leg-rdl', sets: [{ weight: 50, reps: 6 }] };
+  assert.equal(resolveOption(r, withSets, 'trap-bar-deadlift').exerciseId, 'single-leg-rdl');
+  const emptied = { exerciseId: 'romanian-deadlift', sets: [] };
+  assert.equal(resolveOption(r, emptied, 'trap-bar-deadlift').exerciseId, 'trap-bar-deadlift');
+  assert.equal(resolveOption(r, undefined, 'not-an-option').exerciseId, 'romanian-deadlift');
 });

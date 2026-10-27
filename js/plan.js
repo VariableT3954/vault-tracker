@@ -169,6 +169,13 @@ export function setsFor(row, option, phase) {
   return (option.sets ?? row.sets)[phase];
 }
 
+// Which option a row shows: the one already logged, else the remembered choice, else the first.
+export function resolveOption(row, entry, choice) {
+  const byId = (id) => row.options.find((o) => o.exerciseId === id);
+  if (entry?.sets?.length) return byId(entry.exerciseId) ?? row.options[0];
+  return byId(choice) ?? row.options[0];
+}
+
 export function exerciseInfo(exerciseId) {
   for (const s of SESSIONS) {
     for (const r of s.rows) {
