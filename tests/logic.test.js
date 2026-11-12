@@ -1,7 +1,7 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import {
-  todayISO, defaultSessionId, isVaultDay, round5,
+  todayISO, isVaultDay, weekdayOf, round5,
   targetWeightText, parseNum, addDaysISO, FIELDS, formatSet, formatDate,
 } from '../js/logic.js';
 
@@ -27,15 +27,6 @@ test('todayISO uses local date', () => {
   assert.equal(todayISO(new Date(2026, 0, 5, 0, 1)), '2026-01-05');
 });
 
-test('defaultSessionId maps weekdays to sessions', () => {
-  assert.equal(defaultSessionId('2026-10-26'), 'mon');
-  assert.equal(defaultSessionId('2026-10-27'), 'tue');
-  assert.equal(defaultSessionId('2026-10-28'), 'wed');
-  assert.equal(defaultSessionId('2026-10-29'), 'thu');
-  assert.equal(defaultSessionId('2026-10-30'), 'fri');
-  assert.equal(defaultSessionId('2026-10-31'), null);
-  assert.equal(defaultSessionId('2026-11-01'), null);
-});
 
 test('isVaultDay is Monday and Thursday', () => {
   assert.equal(isVaultDay('2026-10-26'), true);
@@ -71,4 +62,9 @@ test('FIELDS per exercise type', () => {
   assert.deepEqual(FIELDS.lift, ['weight', 'reps']);
   assert.deepEqual(FIELDS.plyo, ['drill', 'contacts']);
   assert.deepEqual(Object.keys(FIELDS).sort(), ['count', 'done', 'hold', 'iso', 'lift', 'plyo', 'reps']);
+});
+
+test('weekdayOf gives the local day number', () => {
+  assert.equal(weekdayOf('2026-10-26'), 1);
+  assert.equal(weekdayOf('2026-11-01'), 0);
 });

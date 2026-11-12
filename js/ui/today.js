@@ -1,11 +1,14 @@
 // Today: the planned (or chosen) workout, logged one set at a time.
 import { h, choiceDialog, confirmDialog, toast, debounce, flushPending } from './dom.js';
-import { SESSIONS, getSession, setsFor, resolveOption, PHASE_NAMES } from '../plan.js';
 import {
-  FIELDS, todayISO, defaultSessionId, isVaultDay, targetWeightText, parseNum, formatSet, formatDate,
+  getProgram, getSession, defaultSessionId, rowsFor, planFor, resolveOption, PHASE_NAMES,
+} from '../plan.js';
+import {
+  FIELDS, todayISO, isVaultDay, targetWeightText, parseNum, formatSet, formatDate,
 } from '../logic.js';
 
-const DAY_NAMES = { mon: 'Monday', tue: 'Tuesday', wed: 'Wednesday', thu: 'Thursday', fri: 'Friday' };
+const WEEKDAY_NAMES = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'];
+const dayName = (sessionId) => WEEKDAY_NAMES[getSession(sessionId)?.weekday] ?? '';
 const FIELD_LABEL = { weight: 'lb', reps: 'reps', seconds: 'sec', contacts: 'contacts', drill: 'drill', count: 'count', minutes: 'min' };
 // The field a set can't be logged without.
 const REQUIRED = { lift: 'reps', iso: 'seconds', plyo: 'contacts', reps: 'reps', hold: 'seconds', count: 'count', done: null };
@@ -20,9 +23,12 @@ export function render(root, ctx) {
   const { store, navigate } = ctx;
   const rerender = () => render(root, ctx);
   const state = store.getState();
+  const program = getProgram(state.settings.program);
   const w = store.inProgress();
   const today = todayISO();
-  const todaySid = defaultSessionId(today);
+  const todaySid = defaultSessionId(program.id, today);
+  // A workout picked under the other training type doesn't carry over.
+  if (picked && !program.sessions.some((s) => s.id === picked)) picked = null;
   const sessionId = w ? w.sessionId : (picked ?? todaySid);
   const phase = w ? w.phase : state.settings.phase;
   const session = sessionId ? getSession(sessionId) : null;
@@ -37,7 +43,7 @@ export function render(root, ctx) {
     const cur = store.inProgress();
     if (cur && store.hasLoggedSets()) {
       const choice = await choiceDialog(
-        `You've logged sets in ${DAY_NAMES[cur.sessionId]}'s workout. What should happen to them?`,
+        `You've logged sets in ${dayName(cur.sessionId)}'s workout. What should happen to them?`,
         [
           { label: 'Finish and switch', value: 'finish', primary: true },
           { label: 'Discard and switch', value: 'discard', danger: true },
@@ -66,14 +72,14 @@ export function render(root, ctx) {
     h('div', { class: 'head' },
       h('div', {},
         h('p', { class: 'muted small' }, formatDate(w ? w.date : today)),
-        h('h1', {}, session ? DAY_NAMES[session.id] : 'Rest day'),
-        session && h('p', { class: 'muted' }, `${session.fixed} → ${session.title}`)),
+        h('h1', {}, session ? dayName(session.id) : program.restTitle),
+        session && h('p', { class: 'muted' }, session.fixed ? `${session.fixed} → ${session.title}` : session.title)),
       h('span', { class: 'chip' }, PHASE_NAMES[phase])),
   ];
 
   if (w && store.isStale()) {
     els.push(h('div', { class: 'banner' },
-      h('p', {}, `${DAY_NAMES[w.sessionId]}'s workout from ${formatDate(w.date)} isn't finished.`),
+      h('p', {}, `${dayName(w.sessionId)}'s workout from ${formatDate(w.date)} isn't finished.`),
       h('div', { class: 'row-btns' },
         h('button', {
           onclick: () => {
@@ -95,26 +101,26 @@ export function render(root, ctx) {
           },
         }, 'Discard')),
       todaySid && todaySid !== w.sessionId
-        && h('p', {}, h('button', { class: 'link', onclick: () => switchTo(todaySid) }, `Today's plan: ${DAY_NAMES[todaySid]} →`))));
+        && h('p', {}, h('button', { class: 'link', onclick: () => switchTo(todaySid) }, `Today's plan: ${dayName(todaySid)} →`))));
   }
 
   // ---- switch workout ----
   els.push(h('div', { class: 'field' },
     h('label', { for: 'switch' }, w ? 'Workout in progress' : 'Workout'),
     h('select', { id: 'switch', onchange: (e) => switchTo(e.target.value) },
-      !session && h('option', { value: '', selected: true }, 'Rest day'),
-      SESSIONS.map((s) => h('option', { value: s.id, selected: s.id === sessionId },
-        `${DAY_NAMES[s.id]} · ${s.title}${s.id === todaySid ? ' (today)' : ''}`)))));
+      !session && h('option', { value: '', selected: true }, program.restTitle),
+      program.sessions.map((s) => h('option', { value: s.id, selected: s.id === sessionId },
+        `${dayName(s.id)} · ${s.title}${s.id === todaySid ? ' (today)' : ''}`)))));
 
   if (!session) {
     els.push(h('div', { class: 'card' },
-      h('h2', {}, 'Rest day'),
+      h('h2', {}, program.restTitle),
       h('p', { class: 'muted' }, 'Nothing planned. If your week got shuffled, pick a workout above.')));
     root.replaceChildren(...els);
     return;
   }
 
-  for (const row of session.rows) els.push(rowCard(row));
+  for (const row of rowsFor(session, phase)) els.push(rowCard(row));
 
   // ---- finish ----
   if (w && store.hasLoggedSets()) {
@@ -145,7 +151,7 @@ export function render(root, ctx) {
     }, 'Discard workout')));
   }
 
-  if (isVaultDay(today) || sessionId === 'mon' || sessionId === 'thu') {
+  if (program.id === 'vault' && (isVaultDay(today) || sessionId === 'mon' || sessionId === 'thu')) {
     els.push(h('div', { class: 'card' },
       h('h2', {}, 'Vault day'),
       h('p', { class: 'muted' }, 'How did practice go?'),
@@ -159,9 +165,10 @@ export function render(root, ctx) {
     const entry = w?.entries[row.id];
     const logged = entry?.sets ?? [];
     const option = resolveOption(row, entry, store.choiceFor(row.id));
-    const planned = setsFor(row, option, phase);
-    const pct = row.pct?.[phase];
-    const max = state.maxes[row.maxRef?.[phase]]?.value;
+    const plan = planFor(row, option, phase);
+    const planned = plan.sets;
+    const { pct } = plan;
+    const max = state.maxes[plan.maxRef]?.value;
     const weight = targetWeightText(pct, max);
     const complete = planned > 0 && logged.length >= planned;
 
@@ -190,7 +197,7 @@ export function render(root, ctx) {
     return h('div', { class: complete ? 'card complete' : 'card' },
       h('div', { class: 'card-title' }, title, complete && h('span', { class: 'tick', 'aria-label': 'Done' }, '✓')),
       h('div', { class: 'target' },
-        row.target[phase],
+        plan.target,
         weight && h('span', { class: 'weight' }, ` · ${weight}`)),
       pct && !max && h('p', { class: 'cue' },
         h('button', { class: 'link', onclick: () => navigate('#/more') }, 'Add your max'), ' to see target weights.'),

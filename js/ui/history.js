@@ -17,7 +17,7 @@ export function render(root, { store, navigate, arg }) {
         return h('button', { class: 'list-item', onclick: () => navigate(`#/history/${w.id}`) },
           h('div', {},
             h('div', {}, h('strong', {}, formatDate(w.date)), ` · ${session?.title ?? w.sessionId}`),
-            h('div', { class: 'sub' }, `${PHASE_NAMES[w.phase]} · ${sets} sets`)),
+            h('div', { class: 'sub' }, `${PHASE_NAMES[w.phase]} · ${sets} ${sets === 1 ? 'set' : 'sets'}`)),
           h('span', { class: 'chev', 'aria-hidden': 'true' }, '›'));
       })),
   );

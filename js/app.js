@@ -7,7 +7,9 @@ import * as history from './ui/history.js';
 import * as journal from './ui/journal.js';
 import * as notes from './ui/notes.js';
 import * as more from './ui/more.js';
+import * as choose from './ui/choose.js';
 import { runBackup } from './ui/backup-ui.js';
+import { getProgram } from './plan.js';
 
 const store = createStore(localStorage);
 // Handy for checking data from the browser console.
@@ -32,17 +34,18 @@ const app = document.getElementById('app');
 const tabs = document.getElementById('tabs');
 const banner = document.getElementById('banner');
 
-function currentRoute() {
+// Only the chosen training type's sections are reachable (runners don't get the vault tabs).
+function currentRoute(program) {
   const [name, arg] = location.hash.replace(/^#\/?/, '').split('/');
-  return { name: ROUTES[name] ? name : 'today', arg };
+  return { name: program.tabs.includes(name) ? name : 'today', arg };
 }
 
 const navigate = (hash) => {
   location.hash = hash;
 };
 
-function renderTabs(active) {
-  tabs.replaceChildren(...TABS.map(([name, label, icon]) => {
+function renderTabs(program, active) {
+  tabs.replaceChildren(...TABS.filter(([name]) => program.tabs.includes(name)).map(([name, label, icon]) => {
     const a = h('a', { href: `#/${name}`, 'aria-current': name === active ? 'page' : null });
     a.innerHTML = `${icon}<span>${label}</span>`;
     return a;
@@ -66,8 +69,22 @@ let renderedDate = todayISO();
 function renderApp() {
   flushPending();
   renderedDate = todayISO();
-  const { name, arg } = currentRoute();
-  renderTabs(name);
+  const program = getProgram(store.getState().settings.program);
+  if (!program) {
+    // New phone: ask once what it is training for, then open on Today.
+    tabs.replaceChildren();
+    banner.replaceChildren();
+    choose.render(app, {
+      store,
+      onChosen: () => {
+        if (location.hash && location.hash !== '#/today') navigate('#/today');
+        else renderApp();
+      },
+    });
+    return;
+  }
+  const { name, arg } = currentRoute(program);
+  renderTabs(program, name);
   renderBanner();
   ROUTES[name].render(app, { store, navigate, arg, rerender: renderApp });
 }

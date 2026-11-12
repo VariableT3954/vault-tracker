@@ -266,3 +266,58 @@ test('a late note save goes to its own workout and never starts a new one', () =
   s.setNote('tue-6', 'nordic-curl', 'lost', gone.id);
   assert.equal(s.getState().workouts.length, 1);
 });
+
+test('a new phone has no training type yet', () => {
+  const s = createStore(memStorage(), clock(2026, 11, 11).fn);
+  assert.equal(s.getState().settings.program, null);
+});
+
+test('a phone with existing data stays on pole vault without asking', () => {
+  const saved = { workouts: [], settings: { phase: 'SP' }, journal: { '2026-10-26': { text: 'x' } } };
+  const s = createStore(memStorage({ [STORAGE_KEY]: JSON.stringify(saved) }), clock(2026, 11, 11).fn);
+  assert.equal(s.getState().settings.program, 'vault');
+  assert.equal(s.getState().settings.phase, 'SP');
+});
+
+test('setProgram saves the choice and fixes a phase the program lacks', () => {
+  const storage = memStorage();
+  const s = createStore(storage, clock(2026, 11, 11).fn);
+  s.setProgram('vault');
+  s.setPhase('SP');
+  s.setProgram('sprint');
+  assert.equal(s.getState().settings.program, 'sprint');
+  assert.equal(s.getState().settings.phase, 'GP', 'SP is not a runner phase');
+  s.setPhase('C');
+  s.setProgram('vault');
+  assert.equal(s.getState().settings.phase, 'C', 'shared phase is kept');
+  assert.equal(createStore(storage, clock(2026, 11, 11).fn).getState().settings.program, 'vault');
+});
+
+test('setProgram is refused while a workout has logged sets', () => {
+  const s = createStore(memStorage(), clock(2026, 11, 11).fn);
+  s.setProgram('vault');
+  s.startWorkout('fri');
+  s.logSet('fri-3', 'back-squat', sq(185, 5));
+  assert.throws(() => s.setProgram('sprint'), /IN_PROGRESS/);
+  assert.equal(s.getState().settings.program, 'vault');
+});
+
+test('setProgram drops an empty in-progress workout and rejects unknown programs', () => {
+  const s = createStore(memStorage(), clock(2026, 11, 11).fn);
+  s.setProgram('vault');
+  s.startWorkout('fri');
+  s.setProgram('sprint');
+  assert.equal(s.inProgress(), null);
+  assert.deepEqual(s.getState().workouts, []);
+  assert.throws(() => s.setProgram('swimming'), /UNKNOWN_PROGRAM/);
+});
+
+test('restoring an older backup with data lands on pole vault', () => {
+  const s = createStore(memStorage(), clock(2026, 11, 11).fn);
+  s.setProgram('sprint');
+  s.replaceAll({
+    settings: { phase: 'GP' },
+    workouts: [{ id: 'w', sessionId: 'fri', phase: 'GP', date: '2026-10-23', startedAt: 'a', finishedAt: 'b', entries: {} }],
+  });
+  assert.equal(s.getState().settings.program, 'vault');
+});

@@ -11,8 +11,6 @@ export const FIELDS = {
   done: ['minutes'],
 };
 
-const SESSION_BY_WEEKDAY = [null, 'mon', 'tue', 'wed', 'thu', 'fri', null];
-
 const pad = (n) => String(n).padStart(2, '0');
 
 // Local calendar date, never UTC: a workout at 11:30 pm belongs to that day.
@@ -32,8 +30,9 @@ export function addDaysISO(iso, days) {
   return todayISO(d);
 }
 
-export function defaultSessionId(iso) {
-  return SESSION_BY_WEEKDAY[parseISO(iso).getDay()];
+// 0 = Sunday … 6 = Saturday, for a local calendar date.
+export function weekdayOf(iso) {
+  return parseISO(iso).getDay();
 }
 
 export function isVaultDay(iso) {

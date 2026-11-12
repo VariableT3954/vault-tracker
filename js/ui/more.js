@@ -1,18 +1,34 @@
-// More: phase, maxes, backup and import.
-import { h, toast } from './dom.js';
-import { PHASES, PHASE_NAMES, liftExercises } from '../plan.js';
+// More: training type, phase, maxes, backup and import.
+import { h, toast, choiceDialog, confirmDialog } from './dom.js';
+import {
+  PROGRAMS, PROGRAM_IDS, PHASE_NAMES, getProgram, liftExercises,
+} from '../plan.js';
 import { parseNum, formatDate, todayISO } from '../logic.js';
 import { runBackup, pickAndImport } from './backup-ui.js';
-
-// Maxes the plan's percentages use; the rest sit under "Other lifts".
-const KEY_MAXES = ['back-squat', 'partial-squat', 'power-clean'];
 
 export function render(root, ctx) {
   const { store, rerender } = ctx;
   const state = store.getState();
-  const lifts = liftExercises();
-  const key = KEY_MAXES.map((id) => lifts.find((l) => l.exerciseId === id));
-  const others = lifts.filter((l) => !KEY_MAXES.includes(l.exerciseId));
+  const program = getProgram(state.settings.program);
+  const lifts = liftExercises(program.id);
+  // Maxes the plan's percentages use come first; the rest sit under "Other lifts".
+  const key = program.keyMaxes.map((id) => lifts.find((l) => l.exerciseId === id));
+  const others = lifts.filter((l) => !program.keyMaxes.includes(l.exerciseId));
+
+  async function switchProgram(id) {
+    if (id === program.id) return;
+    if (store.hasLoggedSets()) {
+      await choiceDialog('Finish or discard the workout in progress on Today before changing training type.', [], 'OK');
+      return;
+    }
+    const ok = await confirmDialog(
+      `Switch this phone to ${PROGRAMS[id].name}? Your history, maxes and notes stay.`, 'Switch',
+    );
+    if (!ok) return;
+    store.setProgram(id);
+    toast(`Training type: ${PROGRAMS[id].name}`);
+    rerender();
+  }
 
   const maxRow = ({ exerciseId, name }) => {
     const m = state.maxes[exerciseId];
@@ -46,10 +62,19 @@ export function render(root, ctx) {
     h('h1', {}, 'More'),
 
     h('div', { class: 'card' },
+      h('h2', {}, 'Training type'),
+      h('p', { class: 'cue' }, 'Saved on this phone. Decides which plan Today shows.'),
+      h('div', { class: 'seg', role: 'group', 'aria-label': 'Training type', style: 'margin-top:8px' },
+        PROGRAM_IDS.map((id) => h('button', {
+          'aria-pressed': id === program.id ? 'true' : 'false',
+          onclick: () => switchProgram(id),
+        }, PROGRAMS[id].name)))),
+
+    h('div', { class: 'card' },
       h('h2', {}, 'Training phase'),
       h('p', { class: 'cue' }, 'Sets which targets the plan shows. A workout already in progress keeps its phase.'),
       h('div', { class: 'seg', role: 'group', 'aria-label': 'Training phase', style: 'margin-top:8px' },
-        PHASES.map((p) => h('button', {
+        program.phases.map((p) => h('button', {
           'aria-pressed': state.settings.phase === p ? 'true' : 'false',
           onclick: () => {
             store.setPhase(p);

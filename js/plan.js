@@ -1,17 +1,28 @@
-// The 5-day plan, transcribed from reports/Pole vault 5 day training plan.md.
-// Row ids follow the plan's item numbers; split compound items get a/b suffixes.
+// Two training programs, each transcribed from its plan in reports/:
+//   vault  – Pole vault 5 day training plan.md
+//   sprint – Collegiate 100 to 800 lifting plan.md
+// Row ids follow the plans' item numbers; split compound items get a/b suffixes.
 //
-// Row: { id, options, target: {GP,SP,C}, sets: {GP,SP,C}, pct?: {phase: {lo, hi}}, maxRef?: {phase: exerciseId} }
-//   target  – the plan's cell text, verbatim
+// Row: { id, options, target, sets, pct?, maxRef?, phases? } — every field keyed by phase
+//   target  – the plan's cell text
 //   sets    – how many set lines to show (lower bound of a range; 0 for "skip")
 //   pct     – % of a max, when the plan gives one; lo is null for "≤ hi%"
-// Option: { exerciseId, name, type, cue?, sets? }  (option.sets overrides row.sets)
+//   phases  – the phases the row appears in (all of the program's phases when absent)
+// Option: { exerciseId, name, type, cue?, target?, sets?, pct?, maxRef? }
+//   an option's own target/sets/pct/maxRef replace the row's (pct: {} means no % target)
+import { weekdayOf } from './logic.js';
 
-export const PHASES = ['GP', 'SP', 'C'];
-export const PHASE_NAMES = { GP: 'General prep', SP: 'Specific prep', C: 'Competition' };
+export const PHASE_NAMES = {
+  GP: 'General prep', SP: 'Specific prep', MS: 'Max strength', PW: 'Power', C: 'Competition',
+};
 
 const opt = (exerciseId, name, type, extra = {}) => ({ exerciseId, name, type, ...extra });
 const tri = (GP, SP, C) => ({ GP, SP, C });
+const quad = (GP, MS, PW, C) => ({ GP, MS, PW, C });
+const pct = (lo, hi) => ({ lo, hi });
+// The same value in every listed phase.
+const each = (phases, v) => Object.fromEntries(phases.map((p) => [p, v]));
+const RUN = ['GP', 'MS', 'PW', 'C'];
 
 function row(id, options, target, sets, extra = {}) {
   return { id, options: Array.isArray(options) ? options : [options], target, sets, ...extra };
@@ -25,7 +36,7 @@ const bandRows = (day, n) => [
     tri('2 × 15', '2 × 15', '2 × 15'), tri(2, 2, 2)),
 ];
 
-export const SESSIONS = [
+const VAULT_SESSIONS = [
   {
     id: 'mon', weekday: 1, fixed: 'Vault', title: 'Upper body A',
     rows: [
@@ -152,21 +163,153 @@ export const SESSIONS = [
   },
 ];
 
+// Lifting only; the running is planned separately. Mon/Fri load the legs, Tue/Thu are upper body.
+const SPRINT_SESSIONS = [
+  {
+    id: 'r-mon', weekday: 1, fixed: null, title: 'Lower A · Strength',
+    rows: [
+      row('r-mon-1', [
+        opt('hang-power-clean', 'Hang power clean', 'lift'),
+        opt('clean-pull', 'Clean pull', 'lift', {
+          cue: 'No catch: pull past the hips. % of your power clean max.',
+          target: quad('4 × 3 at 85–95%', '4 × 3 at 90–100%', '4 × 2 at 90–100%', '3 × 2 at 90–100%'),
+          sets: quad(4, 4, 4, 3),
+          pct: quad(pct(85, 95), pct(90, 100), pct(90, 100), pct(90, 100)),
+        }),
+        opt('jump-shrug', 'Jump shrug', 'lift', {
+          cue: '% of your power clean max',
+          target: quad('3 × 4 at 30–45%', '3 × 4 at 30–45%', '3 × 4 at 30–45%', '2 × 3 at 30–45%'),
+          sets: quad(3, 3, 3, 2),
+          pct: each(RUN, pct(30, 45)),
+        })],
+      quad('4 × 3 at 65–75%', '4 × 3 at 75–85%', '5 × 2 at 80–87%', '3 × 2 at 80–87%'), quad(4, 4, 5, 3),
+      { pct: quad(pct(65, 75), pct(75, 85), pct(80, 87), pct(80, 87)), maxRef: each(RUN, 'power-clean') }),
+      row('r-mon-2a', opt('back-squat', 'Back squat', 'lift', { cue: 'Full depth' }),
+        { GP: '5 × 5 at 65–75%', MS: '4 × 3–5 at 80–90%' }, { GP: 5, MS: 4 },
+        { phases: ['GP', 'MS'], pct: { GP: pct(65, 75), MS: pct(80, 90) }, maxRef: each(['GP', 'MS'], 'back-squat') }),
+      row('r-mon-2b', opt('partial-squat', 'Half squat', 'lift', { cue: 'Thighs about parallel or a little above' }),
+        { PW: '3 × 3 at 85–90%', C: '2–3 × 2–3 at 85–90%' }, { PW: 3, C: 2 },
+        { phases: ['PW', 'C'], pct: each(['PW', 'C'], pct(85, 90)), maxRef: each(['PW', 'C'], 'partial-squat') }),
+      row('r-mon-3', [opt('romanian-deadlift', 'Romanian deadlift', 'lift'), opt('trap-bar-deadlift', 'Trap-bar deadlift', 'lift')],
+        quad('3 × 6', '3 × 4–5, heavy', '3 × 4', '2 × 5'), quad(3, 3, 3, 2)),
+      row('r-mon-4', opt('nordic-curl', 'Nordic hamstring curls', 'reps'),
+        quad('3 × 4', '3 × 5', '2 × 5', '2 × 5'), quad(3, 3, 2, 2)),
+      row('r-mon-5', [opt('standing-calf-raise', 'Standing calf raise', 'lift', { cue: 'Heavy and slow' }),
+        opt('single-leg-calf-raise', 'Single-leg calf raise', 'lift', { cue: 'Heavy and slow · /leg' })],
+        quad('3 × 8–10', '3 × 6–8', '2 × 6–8', '2 × 6–8'), quad(3, 3, 2, 2)),
+    ],
+  },
+  {
+    id: 'r-tue', weekday: 2, fixed: null, title: 'Upper A',
+    rows: [
+      row('r-tue-1', [opt('bench-press', 'Bench press', 'lift'),
+        opt('db-bench', 'Dumbbell bench', 'lift', {
+          target: quad('3 × 6', '3 × 5', '3 × 4', '2–3 × 4'), pct: {}, maxRef: {},
+        })],
+        quad('3 × 6 at 65–75%', '3 × 4–5 at 75–85%', '3 × 3–4 at 80–85%', '2–3 × 3 at about 85%'), quad(3, 3, 3, 2),
+        { pct: quad(pct(65, 75), pct(75, 85), pct(80, 85), pct(85, 85)), maxRef: each(RUN, 'bench-press') }),
+      row('r-tue-2', [opt('weighted-pull-up', 'Weighted pull-up', 'lift'), opt('barbell-row', 'Barbell row', 'lift')],
+        quad('3 × 6', '3 × 4–5', '3 × 4', '2 × 4'), quad(3, 3, 3, 2)),
+      row('r-tue-3', opt('copenhagen-adduction', 'Copenhagen adduction', 'reps', { cue: '/side' }),
+        quad('1 × 6–10/side, building weekly', '1 × 12–15/side', '1 × 12–15/side', '1 × 12–15/side'), quad(1, 1, 1, 1)),
+    ],
+  },
+  {
+    id: 'r-thu', weekday: 4, fixed: null, title: 'Upper B',
+    rows: [
+      row('r-thu-1', [opt('incline-db-press', 'Incline dumbbell press', 'lift'), opt('overhead-press', 'Overhead press', 'lift')],
+        quad('3 × 8', '3 × 6', '3 × 5', '2 × 5'), quad(3, 3, 3, 2)),
+      row('r-thu-2', [opt('chin-up', 'Chin-up', 'lift'), opt('one-arm-db-row', 'One-arm DB row', 'lift')],
+        quad('3 × 8', '3 × 6', '3 × 5', '2 × 5'), quad(3, 3, 3, 2)),
+      row('r-thu-3', opt('copenhagen-adduction', 'Copenhagen adduction', 'reps', { cue: '/side' }),
+        { GP: '1 × 6–10/side', MS: '1 × 12–15/side', PW: '1 × 12–15/side' }, { GP: 1, MS: 1, PW: 1 },
+        { phases: ['GP', 'MS', 'PW'] }),
+      row('r-thu-4', [opt('jump-shrug', 'Jump shrug (power touch)', 'lift', { cue: 'Optional. Skip if the legs feel flat before a meet. % of power clean max.' }),
+        opt('speed-squat', 'Speed squat (power touch)', 'lift', {
+          cue: 'Optional. Move it fast. % of back squat max.',
+          target: { C: '2–3 × 2 at 50–60%, fast' }, pct: { C: pct(50, 60) }, maxRef: { C: 'back-squat' },
+        })],
+        { C: '2–3 × 2 at 30–45%, fast' }, { C: 2 },
+        { phases: ['C'], pct: { C: pct(30, 45) }, maxRef: { C: 'power-clean' } }),
+    ],
+  },
+  {
+    id: 'r-fri', weekday: 5, fixed: null, title: 'Lower B · Power',
+    rows: [
+      row('r-fri-1', [opt('jump-squat', 'Jump squat', 'lift', { cue: '% of back squat max' }),
+        opt('speed-squat', 'Banded speed squat', 'lift', {
+          cue: 'Move the bar fast. % of back squat max.',
+          target: { GP: '3 × 5 at 50–60%', MS: '4 × 4 at 50–60%', PW: '4 × 3 at 50–60%' },
+          pct: each(['GP', 'MS', 'PW'], pct(50, 60)),
+        })],
+        { GP: '3 × 5 at 25–30%', MS: '4 × 4 at 25–30%', PW: '4 × 3 at 25–30%' }, { GP: 3, MS: 4, PW: 4 },
+        { phases: ['GP', 'MS', 'PW'], pct: each(['GP', 'MS', 'PW'], pct(25, 30)), maxRef: each(['GP', 'MS', 'PW'], 'back-squat') }),
+      row('r-fri-2', [opt('rfe-split-squat', 'Rear-foot-elevated split squat', 'lift', { cue: '/leg' }),
+        opt('step-up', 'Step-up', 'lift', { cue: '/leg' })],
+        { GP: '3 × 6/leg', MS: '3 × 5/leg', PW: '2 × 5/leg' }, { GP: 3, MS: 3, PW: 2 }, { phases: ['GP', 'MS', 'PW'] }),
+      row('r-fri-3', opt('hip-thrust', 'Barbell hip thrust', 'lift'),
+        { GP: '3 × 6', MS: '3 × 5, heavy', PW: '3 × 3–5, fast' }, { GP: 3, MS: 3, PW: 3 }, { phases: ['GP', 'MS', 'PW'] }),
+      row('r-fri-4', opt('seated-leg-curl', 'Seated leg curl', 'lift'),
+        { GP: '3 × 8', MS: '3 × 6–8', PW: '2 × 8' }, { GP: 3, MS: 3, PW: 2 }, { phases: ['GP', 'MS', 'PW'] }),
+      row('r-fri-5', opt('nordic-curl', 'Nordic hamstring curls', 'reps'),
+        { GP: '2 × 4', MS: '2 × 5', PW: '2 × 4' }, { GP: 2, MS: 2, PW: 2 }, { phases: ['GP', 'MS', 'PW'] }),
+      row('r-fri-6', opt('seated-calf-raise', 'Seated calf raise', 'lift', { cue: 'Heavy' }),
+        { GP: '3 × 8–10', MS: '3 × 6–8' }, { GP: 3, MS: 3 }, { phases: ['GP', 'MS'] }),
+      row('r-fri-7', [opt('jump-squat', 'Jump squat (meet primer)', 'lift', { cue: 'Before a Saturday meet. Light and fast, or skip.' }),
+        opt('hang-power-clean', 'Hang power clean (meet primer)', 'lift', {
+          cue: 'Before a Saturday meet. Light and fast, or skip.',
+          target: { C: '2 × 2 at 50–65%, fast' }, pct: { C: pct(50, 65) }, maxRef: { C: 'power-clean' },
+        })],
+        { C: '2 × 2 at 20–30%, or skip' }, { C: 2 },
+        { phases: ['C'], pct: { C: pct(20, 30) }, maxRef: { C: 'back-squat' } }),
+    ],
+  },
+];
+
+export const PROGRAMS = {
+  vault: {
+    id: 'vault', name: 'Pole vault', phases: ['GP', 'SP', 'C'], sessions: VAULT_SESSIONS,
+    keyMaxes: ['back-squat', 'partial-squat', 'power-clean'],
+    tabs: ['today', 'history', 'journal', 'notes', 'more'], restTitle: 'Rest day',
+  },
+  sprint: {
+    id: 'sprint', name: '100–800 m runner', phases: RUN, sessions: SPRINT_SESSIONS,
+    keyMaxes: ['back-squat', 'partial-squat', 'power-clean', 'bench-press'],
+    tabs: ['today', 'history', 'more'], restTitle: 'No lifting today',
+  },
+};
+export const PROGRAM_IDS = Object.keys(PROGRAMS);
+
+export const getProgram = (id) => PROGRAMS[id];
+
+const allSessions = () => PROGRAM_IDS.flatMap((p) => PROGRAMS[p].sessions);
+
 export function getSession(id) {
-  return SESSIONS.find((s) => s.id === id);
+  return allSessions().find((s) => s.id === id);
 }
 
 export function findRow(rowId) {
-  for (const s of SESSIONS) {
+  for (const s of allSessions()) {
     const r = s.rows.find((x) => x.id === rowId);
     if (r) return r;
   }
   return undefined;
 }
 
-// Sets to show for a row in a phase, honouring an option's own override.
-export function setsFor(row, option, phase) {
-  return (option.sets ?? row.sets)[phase];
+// The program's session for a date's weekday, or null on a day off.
+export function defaultSessionId(programId, iso) {
+  const day = weekdayOf(iso);
+  return getProgram(programId)?.sessions.find((s) => s.weekday === day)?.id ?? null;
+}
+
+export function rowsFor(session, phase) {
+  return session.rows.filter((r) => !r.phases || r.phases.includes(phase));
+}
+
+// Target, set count and % of which max for one option in one phase.
+export function planFor(row, option, phase) {
+  const pick = (key) => (option[key] ?? row[key])?.[phase];
+  return { target: pick('target'), sets: pick('sets'), pct: pick('pct'), maxRef: pick('maxRef') };
 }
 
 // Which option a row shows: the one already logged, else the remembered choice, else the first.
@@ -177,7 +320,7 @@ export function resolveOption(row, entry, choice) {
 }
 
 export function exerciseInfo(exerciseId) {
-  for (const s of SESSIONS) {
+  for (const s of allSessions()) {
     for (const r of s.rows) {
       const o = r.options.find((x) => x.exerciseId === exerciseId);
       if (o) return { name: o.name, type: o.type };
@@ -186,15 +329,20 @@ export function exerciseInfo(exerciseId) {
   return undefined;
 }
 
-// Every lift that can have a max, for the Maxes screen.
-export function liftExercises() {
+// Every lift in a program that can have a max, for the Maxes screen.
+export function liftExercises(programId) {
   const seen = new Map();
-  for (const s of SESSIONS) {
+  for (const s of getProgram(programId).sessions) {
     for (const r of s.rows) {
       for (const o of r.options) {
         if (o.type === 'lift' && !seen.has(o.exerciseId)) seen.set(o.exerciseId, o.name);
       }
     }
+  }
+  // Maxes that % targets point at, even when no exercise in the program has that exact id
+  // (the runner's hang cleans use the power clean max).
+  for (const id of getProgram(programId).keyMaxes) {
+    if (!seen.has(id)) seen.set(id, exerciseInfo(id)?.name ?? id);
   }
   seen.set('partial-squat', 'Half/quarter squat');
   return [...seen].map(([exerciseId, name]) => ({ exerciseId, name }));

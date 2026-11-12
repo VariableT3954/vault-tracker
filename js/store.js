@@ -1,13 +1,14 @@
 // All app data, kept as one JSON object in storage and saved on every change.
 import { todayISO } from './logic.js';
-import { findRow } from './plan.js';
+import { findRow, getProgram } from './plan.js';
 
 export const STORAGE_KEY = 'vault-tracker:v1';
 
 export function emptyState() {
   return {
     version: 1,
-    settings: { phase: 'GP' },
+    // program: null until the phone has been asked what it is training for.
+    settings: { phase: 'GP', program: null },
     maxes: {},
     workouts: [],
     inProgressId: null,
@@ -36,9 +37,17 @@ function load(storage, now) {
   }
 }
 
-// Older saves could hold sets under an entry with no exercise id (a note typed before the
-// first set). Recover the id from the plan: the remembered choice, else the row's first option.
+const hasData = (s) => s.workouts.length > 0 || Object.keys(s.journal ?? {}).length > 0
+  || Object.keys(s.maxes ?? {}).length > 0 || !!s.setupNote?.text;
+
+// Bring older saves up to date:
+// - saves from before training types were all pole vault; keep them there without asking.
+// - sets stored under an entry with no exercise id (a note typed before the first set) get
+//   their id back from the plan: the remembered choice, else the row's first option.
 function repair(state) {
+  state.settings = { ...emptyState().settings, ...state.settings };
+  if (!getProgram(state.settings.program)) state.settings.program = hasData(state) ? 'vault' : null;
+
   for (const w of state.workouts) {
     for (const [rowId, e] of Object.entries(w.entries ?? {})) {
       if (e.exerciseId || !e.sets?.length) continue;
@@ -98,6 +107,20 @@ export function createStore(storage, now = () => new Date()) {
     },
 
     setPhase: (phase) => change(() => { state.settings.phase = phase; }),
+    // Switching training type never touches logged sets: it is refused while a workout has
+    // any, and an empty in-progress workout is dropped. A phase the new program lacks
+    // becomes its first phase.
+    setProgram(id) {
+      const program = getProgram(id);
+      if (!program) throw new Error('UNKNOWN_PROGRAM');
+      const w = current();
+      if (w && countSets(w) > 0) throw new Error('IN_PROGRESS');
+      change(() => {
+        if (w) removeWorkout(w.id);
+        state.settings.program = id;
+        if (!program.phases.includes(state.settings.phase)) state.settings.phase = program.phases[0];
+      });
+    },
     setMax: (exerciseId, value) => change(() => {
       state.maxes[exerciseId] = { value, date: todayISO(now()) };
     }),
@@ -223,7 +246,7 @@ export function createStore(storage, now = () => new Date()) {
       save();
     },
     replaceAll(data) {
-      state = { ...emptyState(), ...clone(data) };
+      state = repair({ ...emptyState(), ...clone(data) });
       save();
     },
   };

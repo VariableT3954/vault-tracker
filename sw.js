@@ -1,7 +1,7 @@
 // Offline support: the whole app is cached on first load and served from the cache.
 // CACHE is a fingerprint of the app files; `node tools/bump-cache.mjs` updates it and
 // `npm test` fails if it is stale. A new name is how phones pick up a new version.
-const CACHE = 'vt-524840cf97';
+const CACHE = 'vt-2cbd5ce806';
 
 const SHELL = [
   './',
@@ -20,6 +20,7 @@ const SHELL = [
   './js/ui/notes.js',
   './js/ui/more.js',
   './js/ui/backup-ui.js',
+  './js/ui/choose.js',
   './icons/icon-192.png',
   './icons/icon-512.png',
   './icons/apple-touch-icon.png',
